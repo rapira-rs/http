@@ -1,0 +1,19 @@
+[package]
+name = "rapira_http"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96.1"
+license = "MIT"
+description = "Rapira HTTP front — a Pingora server plugin that streams requests through PHP"
+
+[dependencies]
+# Path now; later: git = "https://github.com/rotor-server/core.git" (extension_api lives in the core repo)
+extension_api = { path = "../core/crates/extension_api" }
+pingora = { version = "0.8", features = ["proxy"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time"] }
+async-trait = "0.1"
+anyhow = "1"
+log = { version = "0.4", features = ["std"] }
+
+[lints.clippy]
+all = "warn"
