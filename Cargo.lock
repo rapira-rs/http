@@ -515,6 +515,7 @@ dependencies = [
 [[package]]
 name = "extension_api"
 version = "0.1.0"
+source = "git+https://github.com/rapira-rs/extensions_api.git?branch=main#e6785b06e53d8668e66feb34f6d480c2b7c8b5f6"
 dependencies = [
  "anyhow",
 ]

@@ -7,8 +7,7 @@ license = "MIT"
 description = "Rapira HTTP front — a Pingora server plugin that streams requests through PHP"
 
 [dependencies]
-# Path now; later: git = "https://github.com/rapira-rs/extensions_api.git"
-extension_api = { path = "../extensions_api" }
+extension_api = { git = "https://github.com/rapira-rs/extensions_api.git", branch = "main" }
 pingora = { version = "0.8", features = ["proxy"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time"] }
 async-trait = "0.1"
