@@ -1,0 +1,40 @@
+name: Lint
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt }
+      - run: cargo fmt --all --check
+
+  clippy:
+    runs-on: ${{ matrix.os }}
+    # Windows leg is experimental — pingora 0.8.1's Windows build is unverified,
+    # so it runs but does not block merges. Flip once confirmed green.
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+            experimental: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy }
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Keep the deps cache even when the experimental Windows leg fails.
+          cache-on-failure: true
+      - run: cargo clippy --all-targets -- -D warnings
