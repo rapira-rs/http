@@ -146,8 +146,16 @@ async fn serve(php: Php, config: Config, shutdown: watch::Receiver<bool>) -> Res
     );
     service.add_tcp(&listen);
     log::info!("[rapira-http] listening on http://{listen}");
-    // Unix: (fds, shutdown, listeners_per_fd). Runs on this runtime via Handle::current().
-    service.start_service(None, shutdown, 1).await;
+    // (fds, shutdown, listeners_per_fd); the leading fds arg is Unix-only. Runs on this
+    // runtime via Handle::current().
+    service
+        .start_service(
+            #[cfg(unix)]
+            None,
+            shutdown,
+            1,
+        )
+        .await;
     // start_service only joined the accept loops; connection tasks are detached and die
     // with the runtime. Wait for the requests still in flight so their responses go out.
     let deadline = tokio::time::Instant::now() + DRAIN_GRACE;
