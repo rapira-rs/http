@@ -18,6 +18,7 @@ use pingora::server::configuration::ServerConf;
 use pingora::services::Service as _; // brings start_service() into scope
 use pingora::upstreams::peer::HttpPeer;
 use pingora::{Error, ErrorType, Result as PingoraResult};
+use tokio::runtime::{self, Builder};
 use tokio::sync::{oneshot, watch};
 
 /// In-flight requests get this long to finish after the accept loop stops —
@@ -81,7 +82,7 @@ impl Extension for HttpServer {
         let thread = std::thread::Builder::new()
             .name("rapira-http".into())
             .spawn(move || {
-                let rt = tokio::runtime::Builder::new_multi_thread()
+                let rt: runtime::Runtime = Builder::new_multi_thread()
                     .enable_all()
                     .thread_name("rapira-http-io")
                     .build()
@@ -268,7 +269,17 @@ async fn build_request(session: &mut Session, config: &Config) -> PingoraResult<
     let header: &pingora::prelude::RequestHeader = session.req_header();
     let method: String = header.method.as_str().to_owned();
     let uri: String = header.uri.to_string(); // path + ?query → REQUEST_URI
-    let protocol: String = format!("{:?}", header.version); // e.g. "HTTP/1.1"
+    // → SERVER_PROTOCOL, e.g. "HTTP/1.1". The framework-type → CGI-string mapping
+    // lives here, not in core; static strings for the common versions (the Debug
+    // formatter shows up in per-request profiles).
+    let v = header.version;
+    let protocol: String = match v {
+        pingora::http::Version::HTTP_11 => "HTTP/1.1".to_owned(),
+        pingora::http::Version::HTTP_10 => "HTTP/1.0".to_owned(),
+        pingora::http::Version::HTTP_2 => "HTTP/2.0".to_owned(),
+        pingora::http::Version::HTTP_3 => "HTTP/3.0".to_owned(),
+        _ => format!("{v:?}"),
+    };
     let headers: Vec<(String, Vec<u8>)> = header
         .headers
         .iter()
