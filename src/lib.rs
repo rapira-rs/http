@@ -205,12 +205,26 @@ impl ProxyHttp for PhpProxy {
         } else {
             response.status
         };
-        // RFC 9110: 204 and 304 carry no message body and no server-framed
-        // Content-Length (a 304's own length metadata must not be overwritten with 0).
+        // 204/304 have no message body: never add a server-framed Content-Length (a
+        // forced 0 would misframe a 304). PHP's own Content-Length is dropped by
+        // skip_response_header like on any response.
         let no_body = matches!(status, 204 | 304);
 
         let mut header = ResponseHeader::build(status, Some(response.headers.len() + 1))?;
+        // Extra hop-by-hop fields named by a Connection value (RFC 9110 §7.6.1,
+        // https://www.rfc-editor.org/rfc/rfc9110#section-7.6.1). PHP almost never
+        // sends Connection, so this stays empty and allocates nothing.
+        let mut conn_named: Vec<String> = Vec::new();
         for (name, value) in response.headers {
+            if name.eq_ignore_ascii_case("connection") {
+                for tok in value.split(|&b| b == b',') {
+                    let tok = String::from_utf8_lossy(tok).trim().to_ascii_lowercase();
+                    if !tok.is_empty() {
+                        conn_named.push(tok);
+                    }
+                }
+                continue; // Connection is itself hop-by-hop
+            }
             // Framing is derived from the buffered body and connection management is
             // ours, never PHP's (hop-by-hop, RFC 9110 §7.6.1).
             if skip_response_header(&name) {
@@ -218,6 +232,11 @@ impl ProxyHttp for PhpProxy {
             }
             // append: PHP may legally repeat headers (Set-Cookie, Vary, Link).
             header.append_header(name, value)?; // value: Vec<u8>, binary-safe
+        }
+        // Rare path only: drop the fields a Connection value named, before our own
+        // Content-Length goes in below so a `Connection: content-length` can't strip it.
+        for tok in &conn_named {
+            header.remove_header(tok.as_str());
         }
         if !no_body {
             header.insert_header("Content-Length", response.body.len().to_string())?;
@@ -294,8 +313,10 @@ async fn build_request(session: &mut Session, config: &Config) -> PingoraResult<
         .get("content-length")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<usize>().ok());
-    // Only HTTP/1.1 defines the 100-continue handshake; sending an interim 100 to an
-    // HTTP/1.0 client (or an h2 stream) corrupts the exchange (RFC 9110 §10.1.1).
+    // Send the interim 100 only for HTTP/1.1. Per RFC 9110 §10.1.1
+    // (https://www.rfc-editor.org/rfc/rfc9110#section-10.1.1) a server MUST ignore an
+    // HTTP/1.0 request's 100-continue expectation; h2/h3 handle interim responses over
+    // their own framing and aren't driven from this path.
     let expects_continue = header.version == pingora::http::Version::HTTP_11
         && header
             .headers
