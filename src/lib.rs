@@ -164,8 +164,13 @@ async fn serve(php: Php, config: Config, shutdown: watch::Receiver<bool>) -> Res
         }
         #[cfg(unix)]
         Listen::Unix(path) => {
-            let path = path.to_string_lossy();
-            service.add_uds(&path, None); // None → pingora default perms (0o666)
+            // Reject rather than bind a lossy-converted (corrupted) path.
+            let path = path
+                .to_str()
+                .ok_or_else(|| anyhow!("unix socket path must be valid UTF-8"))?;
+            // None → pingora default perms (0o666): the same local accessibility as a
+            // loopback TCP bind, and a proxy running as another user can connect.
+            service.add_uds(path, None);
             log::info!("[rapira-http] listening on unix:{path}");
         }
     }
