@@ -225,12 +225,7 @@ impl ProxyHttp for PhpProxy {
         let mut conn_named: Vec<String> = Vec::new();
         for (name, value) in response.headers {
             if name.eq_ignore_ascii_case("connection") {
-                for tok in value.split(|&b| b == b',') {
-                    let tok = String::from_utf8_lossy(tok).trim().to_ascii_lowercase();
-                    if !tok.is_empty() {
-                        conn_named.push(tok);
-                    }
-                }
+                connection_named_headers(&value, &mut conn_named);
                 continue; // Connection is itself hop-by-hop
             }
             // Framing is derived from the buffered body and connection management is
@@ -273,9 +268,21 @@ impl ProxyHttp for PhpProxy {
     }
 }
 
+/// Parse a `Connection` header value into the lower-cased field names it lists,
+/// appending them to `out` (RFC 9110 §7.6.1). Values are binary-safe, so a lossy
+/// UTF-8 decode is used only to tokenize; empty tokens are skipped.
+pub fn connection_named_headers(value: &[u8], out: &mut Vec<String>) {
+    for tok in value.split(|&b| b == b',') {
+        let tok = String::from_utf8_lossy(tok).trim().to_ascii_lowercase();
+        if !tok.is_empty() {
+            out.push(tok);
+        }
+    }
+}
+
 /// Headers this front owns instead of PHP: framing comes from the buffered body and
 /// connection management belongs to the server (hop-by-hop, RFC 9110 §7.6.1).
-fn skip_response_header(name: &str) -> bool {
+pub fn skip_response_header(name: &str) -> bool {
     [
         "content-length",
         "transfer-encoding",
