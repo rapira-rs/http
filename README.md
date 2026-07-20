@@ -1,5 +1,7 @@
 # rapira_http
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/rustatian/http?utm_source=badge)
+
 Rapira HTTP front — a [Pingora](https://github.com/cloudflare/pingora) server that
 terminates HTTP and answers every request from PHP through the `extension_api` `Php`
 bridge. It never proxies upstream.
