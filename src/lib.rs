@@ -26,13 +26,20 @@ use tokio::sync::{oneshot, watch};
 /// dropping the runtime aborts them mid-response. Kept under the host's 30s grace.
 const DRAIN_GRACE: Duration = Duration::from_secs(25);
 
-/// Placeholder for the config rapira will supply later. Every field is hardcoded for now;
-/// `Extension::init()` takes no arguments, so there is no channel to inject config yet
-/// (see the crate's "Future work" notes).
+/// Where the HTTP front binds. Structurally mirrors rapira's config-side listen type,
+/// but owned here so this extension crate never depends on core's config crate.
+#[derive(Clone, Debug)]
+pub enum Listen {
+    Tcp(std::net::SocketAddr),
+    #[cfg(unix)]
+    Unix(std::path::PathBuf),
+}
+
+/// Configuration supplied by rapira (rapira.toml / CLI) via [`Extension::init`].
 #[derive(Clone)]
 pub struct Config {
-    /// TCP address to bind, e.g. `0.0.0.0:8080`.
-    pub listen: String,
+    /// Address to bind: TCP socket or unix domain socket.
+    pub listen: Listen,
     /// `SERVER_NAME` reported to PHP.
     pub server_name: String,
     /// `SERVER_PORT` reported to PHP.
@@ -45,9 +52,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            listen: "0.0.0.0:8080".to_owned(),
+            // Standalone fallback only — rapira always passes a fully populated Config.
+            listen: Listen::Tcp(std::net::SocketAddr::from(([127, 0, 0, 1], 8000))),
             server_name: "localhost".to_owned(),
-            server_port: 8080,
+            server_port: 8000,
             max_body_size: 8 * 1024 * 1024,
         }
     }
@@ -61,9 +69,12 @@ pub struct HttpServer {
 }
 
 impl Extension for HttpServer {
-    fn init() -> Self {
+    /// Built by rapira from its validated TOML/CLI config.
+    type Config = Config;
+
+    fn init(config: Config) -> Self {
         Self {
-            config: Config::default(),
+            config,
             shutdown: None,
             thread: None,
         }
@@ -84,6 +95,7 @@ impl Extension for HttpServer {
             .spawn(move || {
                 let rt: runtime::Runtime = Builder::new_multi_thread()
                     .enable_all()
+                    .worker_threads(2)
                     .thread_name("rapira-http-io")
                     .build()
                     .expect("build http runtime");
@@ -144,8 +156,19 @@ async fn serve(php: Php, config: Config, shutdown: watch::Receiver<bool>) -> Res
             inflight: inflight.clone(),
         },
     );
-    service.add_tcp(&listen);
-    log::info!("[rapira-http] listening on http://{listen}");
+    match &listen {
+        Listen::Tcp(addr) => {
+            let addr = addr.to_string();
+            service.add_tcp(&addr);
+            log::info!("[rapira-http] listening on http://{addr}");
+        }
+        #[cfg(unix)]
+        Listen::Unix(path) => {
+            let path = path.to_string_lossy();
+            service.add_uds(&path, None); // None → pingora default perms (0o666)
+            log::info!("[rapira-http] listening on unix:{path}");
+        }
+    }
     // (fds, shutdown, listeners_per_fd); the leading fds arg is Unix-only. Runs on this
     // runtime via Handle::current().
     service

@@ -1,13 +1,13 @@
 [package]
 name = "rapira_http"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.96.1"
 license = "MIT"
 description = "Rapira HTTP front — a Pingora server plugin that streams requests through PHP"
 
 [dependencies]
-extension_api = { git = "https://github.com/rapira-rs/extensions_api.git", branch = "main" }
+extension_api = { git = "https://github.com/rustatian/extensions_api.git", branch = "main" }
 pingora = { version = "0.8", features = ["proxy"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time"] }
 async-trait = "0.1"
